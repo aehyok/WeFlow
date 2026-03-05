@@ -49,7 +49,16 @@ type ContentCardType = ContentType | 'sns'
 type SessionLayout = 'shared' | 'per-session'
 
 type DisplayNamePreference = 'group-nickname' | 'remark' | 'nickname'
-type DateRangePreset = 'all' | 'today' | 'yesterday' | 'last3days' | 'last7days' | 'last30days' | 'custom'
+type DateRangePreset =
+  | 'all'
+  | 'today'
+  | 'yesterday'
+  | 'last3days'
+  | 'last7days'
+  | 'last30days'
+  | 'last1year'
+  | 'last2years'
+  | 'custom'
 type CalendarCell = { date: Date; inCurrentMonth: boolean }
 
 type TextExportFormat = 'chatlab' | 'chatlab-jsonl' | 'json' | 'arkme-json' | 'html' | 'txt' | 'excel' | 'weclone' | 'sql'
@@ -463,6 +472,18 @@ const createDateRangeByPreset = (
       start: yesterday,
       end: endOfDay(yesterday)
     }
+  }
+
+  if (preset === 'last1year' || preset === 'last2years') {
+    const yearsBack = preset === 'last1year' ? 1 : 2
+    const start = new Date(baseStart)
+    const expectedMonth = start.getMonth()
+    start.setFullYear(start.getFullYear() - yearsBack)
+    // Handle leap-year fallback (e.g. Feb 29 -> Feb 28).
+    if (start.getMonth() !== expectedMonth) {
+      start.setDate(0)
+    }
+    return { start, end }
   }
 
   const daysBack = preset === 'last3days' ? 2 : preset === 'last7days' ? 6 : 29
@@ -2425,6 +2446,8 @@ function ExportPage() {
     if (timeRangePreset === 'last3days') return '最近3天'
     if (timeRangePreset === 'last7days') return '最近一周'
     if (timeRangePreset === 'last30days') return '最近一个月'
+    if (timeRangePreset === 'last1year') return '最近一年'
+    if (timeRangePreset === 'last2years') return '最近两年'
     if (options.dateRange) {
       return `${formatDateInputValue(options.dateRange.start)} 至 ${formatDateInputValue(options.dateRange.end)}`
     }
@@ -4673,7 +4696,9 @@ function ExportPage() {
                       { value: 'yesterday', label: '昨天' },
                       { value: 'last3days', label: '最近3天' },
                       { value: 'last7days', label: '最近一周' },
-                      { value: 'last30days', label: '最近一个月' }
+                      { value: 'last30days', label: '最近一个月' },
+                      { value: 'last1year', label: '最近一年' },
+                      { value: 'last2years', label: '最近两年' }
                     ] as Array<{ value: Exclude<DateRangePreset, 'custom'>; label: string }>).map((preset) => {
                       const isActive = isTimeRangePresetActive(preset.value)
                       return (
