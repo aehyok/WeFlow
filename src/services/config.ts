@@ -403,7 +403,7 @@ export type ExportWriteLayout = 'A' | 'B' | 'C'
 export async function getExportWriteLayout(): Promise<ExportWriteLayout> {
   const value = await config.get(CONFIG_KEYS.EXPORT_WRITE_LAYOUT)
   if (value === 'A' || value === 'B' || value === 'C') return value
-  return 'A'
+  return 'B'
 }
 
 export async function setExportWriteLayout(layout: ExportWriteLayout): Promise<void> {

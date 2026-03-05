@@ -1398,7 +1398,7 @@ function ExportPage() {
     setIsBaseConfigLoading(true)
     let isReady = true
     try {
-      const [savedPath, savedMedia, savedVoiceAsText, savedExcelCompactColumns, savedTxtColumns, savedConcurrency, savedSessionMap, savedContentMap, savedSessionRecordMap, savedSnsPostCount, exportCacheScope] = await Promise.all([
+      const [savedPath, savedMedia, savedVoiceAsText, savedExcelCompactColumns, savedTxtColumns, savedConcurrency, savedSessionMap, savedContentMap, savedSessionRecordMap, savedSnsPostCount, savedWriteLayout, exportCacheScope] = await Promise.all([
         configService.getExportPath(),
         configService.getExportDefaultMedia(),
         configService.getExportDefaultVoiceAsText(),
@@ -1409,6 +1409,7 @@ function ExportPage() {
         configService.getExportLastContentRunMap(),
         configService.getExportSessionRecordMap(),
         configService.getExportLastSnsPostCount(),
+        configService.getExportWriteLayout(),
         ensureExportCacheScope()
       ])
 
@@ -1421,15 +1422,12 @@ function ExportPage() {
         setExportFolder(downloadsPath)
       }
 
-      setWriteLayout('B')
+      setWriteLayout(savedWriteLayout)
       setLastExportBySession(savedSessionMap)
       setLastExportByContent(savedContentMap)
       setExportRecordsBySession(savedSessionRecordMap)
       setLastSnsExportPostCount(savedSnsPostCount)
-      await Promise.all([
-        configService.setExportWriteLayout('B'),
-        configService.setExportDefaultFormat('json')
-      ])
+      await configService.setExportDefaultFormat('json')
 
       if (cachedSnsStats && Date.now() - cachedSnsStats.updatedAt <= EXPORT_SNS_STATS_CACHE_STALE_MS) {
         setSnsStats({
