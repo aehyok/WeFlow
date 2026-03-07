@@ -6,7 +6,6 @@ import * as https from 'https'
 import * as http from 'http'
 import * as fzstd from 'fzstd'
 import * as crypto from 'crypto'
-import Database from 'better-sqlite3'
 import { app, BrowserWindow } from 'electron'
 import { ConfigService } from './config'
 import { wcdbService } from './wcdbService'
@@ -17,12 +16,6 @@ import { GroupMyMessageCountCacheService, GroupMyMessageCountCacheEntry } from '
 import { exportCardDiagnosticsService } from './exportCardDiagnosticsService'
 import { voiceTranscribeService } from './voiceTranscribeService'
 import { LRUCache } from '../utils/LRUCache.js'
-
-type HardlinkState = {
-  db: Database.Database
-  imageTable?: string
-  dirTable?: string
-}
 
 export interface ChatSession {
   username: string
@@ -213,7 +206,6 @@ class ChatService {
   private avatarCache: Map<string, ContactCacheEntry>
   private readonly avatarCacheTtlMs = 10 * 60 * 1000
   private readonly defaultV1AesKey = 'cfcd208495d565ef'
-  private hardlinkCache = new Map<string, HardlinkState>()
   private readonly contactCacheService: ContactCacheService
   private readonly messageCacheService: MessageCacheService
   private readonly sessionStatsCacheService: SessionStatsCacheService
@@ -4852,13 +4844,6 @@ class ChatService {
       this.groupMyMessageCountCacheService.clearAll()
     }
 
-    for (const state of this.hardlinkCache.values()) {
-      try {
-        state.db?.close()
-      } catch { }
-    }
-    this.hardlinkCache.clear()
-
     if (includeEmojis) {
       emojiCache.clear()
       emojiDownloading.clear()
@@ -6707,10 +6692,6 @@ class ChatService {
 
   private async findDatFile(accountDir: string, baseName: string, sessionId?: string): Promise<string | null> {
     const normalized = this.normalizeDatBase(baseName)
-    if (this.looksLikeMd5(normalized)) {
-      const hardlinkPath = this.resolveHardlinkPath(accountDir, normalized, sessionId)
-      if (hardlinkPath) return hardlinkPath
-    }
 
     const searchPaths = [
       join(accountDir, 'FileStorage', 'Image'),
@@ -6774,68 +6755,6 @@ class ChatService {
 
   private hasXVariant(baseLower: string): boolean {
     return /[._][a-z]$/.test(baseLower)
-  }
-
-  private resolveHardlinkPath(accountDir: string, md5: string, sessionId?: string): string | null {
-    try {
-      const hardlinkPath = join(accountDir, 'hardlink.db')
-      if (!existsSync(hardlinkPath)) return null
-
-      const state = this.getHardlinkState(accountDir, hardlinkPath)
-      if (!state.imageTable) return null
-
-      const row = state.db
-        .prepare(`SELECT dir1, dir2, file_name FROM ${state.imageTable} WHERE md5 = ? LIMIT 1`)
-        .get(md5) as { dir1?: string; dir2?: string; file_name?: string } | undefined
-
-      if (!row) return null
-      const dir1 = row.dir1 as string | undefined
-      const dir2 = row.dir2 as string | undefined
-      const fileName = row.file_name as string | undefined
-      if (!dir1 || !dir2 || !fileName) return null
-      const lowerFileName = fileName.toLowerCase()
-      if (lowerFileName.endsWith('.dat')) {
-        const baseLower = lowerFileName.slice(0, -4)
-        if (!this.hasXVariant(baseLower)) return null
-      }
-
-      let dirName = dir2
-      if (state.dirTable && sessionId) {
-        try {
-          const dirRow = state.db
-            .prepare(`SELECT dir_name FROM ${state.dirTable} WHERE dir_id = ? AND username = ? LIMIT 1`)
-            .get(dir2, sessionId) as { dir_name?: string } | undefined
-          if (dirRow?.dir_name) dirName = dirRow.dir_name as string
-        } catch { }
-      }
-
-      const fullPath = join(accountDir, dir1, dirName, fileName)
-      if (existsSync(fullPath)) return fullPath
-
-      const withDat = `${fullPath}.dat`
-      if (existsSync(withDat)) return withDat
-    } catch { }
-    return null
-  }
-
-  private getHardlinkState(accountDir: string, hardlinkPath: string): HardlinkState {
-    const cached = this.hardlinkCache.get(accountDir)
-    if (cached) return cached
-
-    const db = new Database(hardlinkPath, { readonly: true, fileMustExist: true })
-    const imageRow = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'image_hardlink_info%' ORDER BY name DESC LIMIT 1")
-      .get() as { name?: string } | undefined
-    const dirRow = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'dir2id%' LIMIT 1")
-      .get() as { name?: string } | undefined
-    const state: HardlinkState = {
-      db,
-      imageTable: imageRow?.name as string | undefined,
-      dirTable: dirRow?.name as string | undefined
-    }
-    this.hardlinkCache.set(accountDir, state)
-    return state
   }
 
   private getDatVersion(data: Buffer): number {
